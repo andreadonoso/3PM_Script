@@ -7,15 +7,12 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 # If modifying these scopes, delete the file token.json.
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 
 def main():
   """Shows basic usage of the Gmail API.
   Lists the user's Gmail labels.
-  """
-   """Shows basic usage of the Google Calendar API.
-  Prints the start and name of the next 10 events on the user's calendar.
   """
   creds = None
   # The file token.json stores the user's access and refresh tokens, and is
@@ -48,35 +45,6 @@ def main():
     print("Labels:")
     for label in labels:
       print(label["name"])
-
-    
-    # Call the Calendar API
-    service = build("calendar", "v3", credentials=creds)
-    now = datetime.datetime.utcnow().isoformat() + "Z"  # 'Z' indicates UTC time
-    print("Getting the upcoming 10 events")
-    events_result = (
-        service.events()
-        .list(
-            calendarId="primary",
-            timeMin=now,
-            maxResults=10,
-            singleEvents=True,
-            orderBy="startTime",
-        )
-        .execute()
-    )
-    events = events_result.get("items", [])
-
-    if not events:
-      print("No upcoming events found.")
-      return
-
-    # Prints the start and name of the next 10 events
-    for event in events:
-      start = event["start"].get("dateTime", event["start"].get("date"))
-      print(start, event["summary"])
-
-
 
   except HttpError as error:
     # TODO(developer) - Handle errors from gmail API.
