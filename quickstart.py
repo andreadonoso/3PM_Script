@@ -1,7 +1,7 @@
 import os.path
 import datetime
 import base64
-import email as email_parser
+from io import StringIO
 from bs4 import BeautifulSoup
 
 from google.auth.transport.requests import Request
@@ -12,6 +12,40 @@ from googleapiclient.errors import HttpError
 
 
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.readonly"]
+
+
+# Filter for visible text multi-part (from plain, html, x-amp-html mimeTypes) messages and single-part messages
+def filterMessage(fullMsg):
+  # Checks for multi-part messages
+  if 'parts' in fullMsg['payload']:
+    numParts = len(fullMsg['payload']['parts'])
+    print(f"NUM PARTS: {numParts}")
+    
+    visibleTextParts = []
+    for count, part in enumerate(fullMsg['payload']['parts'], start=1):
+      mimeType = part['mimeType']
+      bodyData = part['body'].get('data', None)
+      
+      if not bodyData:
+        continue 
+  
+      content = base64.urlsafe_b64decode(bodyData).decode('utf-8')
+      soup = BeautifulSoup(content, 'html.parser')
+      text = soup.get_text(separator="\n", strip=True)  
+      # return text
+      visibleTextParts.append(text) 
+    visibleText = "\n\n* * * * * * * * * * * *  PART CHANGE  * * * * * * * * * * * *\n\n".join(visibleTextParts)
+    return visibleText
+  # Checks for single-part messages       
+  else:
+    mimeType = fullMsg['payload']['mimeType']
+    
+    if mimeType == 'text/plain': 
+      return base64.urlsafe_b64decode(fullMsg['payload']['body']['data']).decode('utf-8')
+    elif mimeType == 'text/html':
+      html_content = base64.urlsafe_b64decode(fullMsg['payload']['body']['data']).decode('utf-8')
+      soup = BeautifulSoup(html_content, 'html.parser')
+      return soup.get_text(separator="\n", strip=True)
 
 
 def main():
@@ -45,74 +79,51 @@ def main():
   try:
      # PERFORM SEARCH QUERY
     sentFrom = ""
-    label = ""
+    label = "inbox"
     subject = ""
     body = ""
+    numResults = 130  # Max Results = 500
   
     f = f'from:"{sentFrom}"' if sentFrom else ''
     l = f'label:"{label}"' if label else ''
     s = f'subject:"{subject}"' if subject else ''
-    searchQuery = f'{f} {l} {s} {body}'
+    searchQuery = f'{f} {l} {s} {body}' if any([f, l, s, body]) else 'All mail'
     
-    # Call the Gmail API
+    # Call the Gmail API 
     service_gmail = build("gmail", "v1", credentials=creds)
-    queryRes = service_gmail.users().messages().list(userId="me", q=searchQuery, maxResults=100).execute()
+    queryRes = service_gmail.users().messages().list(userId="me", q=searchQuery, maxResults=numResults).execute()
+    messages = queryRes['messages']
     
-    # Print search query results
-    if 'messages' not in queryRes or (queryRes['resultSizeEstimate'] <= 0):
-      print("No emails found")
-      return 
     
+    # FILTER & PRINT SEARCH QUERY RESULTS
     print("\n\n-----------------------------------------------------------------------------------------------------------------------------\n\n")
     print(f"Query:\t {searchQuery.strip()}")
-    print(f"Results: {queryRes['resultSizeEstimate']}\n")
+    print(f"Results: {queryRes['resultSizeEstimate']}")
+    print(f"Showing: {numResults}\n")
     
-    messages = queryRes['messages']
+    if 'messages' not in queryRes or (queryRes['resultSizeEstimate'] <= 0):
+      print("No emails found\n")
+      print("\n-----------------------------------------------------------------------------------------------------------------------------\n\n")
+      return 
+    
     for count,message in enumerate(messages, start=1):
-      print(f"\n{count})- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n")
+      print(f"\n\n{count})- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n\n")
+      
       fullMsg = service_gmail.users().messages().get(userId="me", id=message['id'], format="full").execute()
       headers = fullMsg['payload']['headers']
       resSubject = next((header['value'] for header in headers if header['name'] == 'Subject'), "No Subject")
-      print(f"SUBJECT: {resSubject}\n")
+      
+      print(f"SUBJECT: \t{resSubject}\n")
 
-      # Filter for visible text
-      # Check if the email has multiple parts (i.e., plain text and HTML)
-      visible_text = None
-      if 'parts' in fullMsg['payload']:
-          for part in fullMsg['payload']['parts']:
-              if part['mimeType'] == 'text/plain':
-                  print("TYPE:\t MP text/plain")
-                  # Plain text content - decode to UTF-8
-                  body_data = part['body']['data']
-                  visible_text = base64.urlsafe_b64decode(body_data).decode('utf-8')
-                  break
-              elif part['mimeType'] == 'text/html':
-                  print("TYPE:\t MP text/html")
-                  # HTML content - decode and parse with BeautifulSoup
-                  body_data = part['body']['data']
-                  html_content = base64.urlsafe_b64decode(body_data).decode('utf-8')
-                  soup = BeautifulSoup(html_content, 'html.parser')
-                  visible_text = soup.get_text(separator="\n", strip=True)
-                  break
-      else:
-          # If the email does not have multiple parts, check if it's HTML or plain text
-          if fullMsg['payload']['mimeType'] == 'text/plain':
-              print("TYPE:\t text/plain")
-              visible_text = base64.urlsafe_b64decode(fullMsg['payload']['body']['data']).decode('utf-8')
-          elif fullMsg['payload']['mimeType'] == 'text/html':
-              print("TYPE:\t text/html")
-              html_content = base64.urlsafe_b64decode(fullMsg['payload']['body']['data']).decode('utf-8')
-              soup = BeautifulSoup(html_content, 'html.parser')
-              visible_text = soup.get_text(separator="\n", strip=True)
-
-      # Print the extracted visible text
-      if visible_text:
+      visibleText = filterMessage(fullMsg)
+      if visibleText:
           print("\nBODY:\n")
-          print(f"{visible_text}")
+          print(f"{visibleText}")
       else:
-          print("No visible text found.")
-          
+        print("")
+          # print("No visible text found.")
     print("\n-----------------------------------------------------------------------------------------------------------------------------\n\n")
+    
     
     # Determine correct dates from subjecta & that we don't have duplicate maintenance id's/(date-time && place)
     # Create a Google calendar event based on the email's body
