@@ -82,12 +82,12 @@ def main():
   creds = authorize(creds);
 
   try:
-     # PERFORM SEARCH QUERY
+    # PERFORM SEARCH QUERY
     sentFrom = ""
-    label = "inbox"
+    label = "index"
     subject = ""
     body = ""
-    numResults = 130  # Max Results = 500
+    numResults = 10  # Max Results = 500
   
     f = f'from:"{sentFrom}"' if sentFrom else ''
     l = f'label:"{label}"' if label else ''
@@ -97,7 +97,6 @@ def main():
     # Call the Gmail API 
     service_gmail = build("gmail", "v1", credentials=creds)
     queryRes = service_gmail.users().messages().list(userId="me", q=searchQuery, maxResults=numResults).execute()
-    messages = queryRes['messages']
     
     
     # FILTER & PRINT SEARCH QUERY RESULTS
@@ -110,6 +109,8 @@ def main():
       print("No emails found\n")
       print("\n-----------------------------------------------------------------------------------------------------------------------------\n\n")
       return 
+    
+    messages = queryRes['messages']
     
     for count,message in enumerate(messages, start=1):
       print(f"\n\n{count})- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n\n")
@@ -125,13 +126,31 @@ def main():
           print("\nBODY:\n")
           print(f"{visibleText}")
       else:
-        print("")
-          # print("No visible text found.")
+          print("No visible text found.")
     print("\n-----------------------------------------------------------------------------------------------------------------------------\n\n")
     
     
-    # Determine correct dates from subjecta & that we don't have duplicate maintenance id's/(date-time && place)
-    # Create a Google calendar event based on the email's body
+    # FILTER VALID EMAILS
+    
+    # APPROACH 1
+    # Determine correct dates from subjects & that we don't have duplicate maintenance id's/(date-time && place)
+    # - When we go through emails, add them to a dictionary (emails) of dictionaries (email content) and return
+    # - Determine valid emails and filter the dictionary into a new one
+    
+    # APPROACH 2
+    # - Write all resulting emails in a word document with the desired formatting for friday doc
+    #     -> Manual word doc validation 
+    #     -> Option 1: Automated calendar entry based on edited/unedited word doc
+    #     -> Option 2: Manual calendar entry based on edited/unedited word doc
+    
+    # APPROACH 3
+    # - Write the valid emails in a word document with the desired formatting for friday doc
+    #     -> Option 1: manual calendar entry
+    #     -> Option 2: Once word doc has been validated, create calendar events based on the word doc
+    #         -> this option allows for document editing
+    
+    
+    # CREATE GOOGLE CALENDAR EVENTS FOR VALID EMAILS
     # Call the Calendar API
     service_gcal = build("calendar", "v3", credentials=creds)
     now = datetime.datetime.utcnow().isoformat() + "Z"  # 'Z' indicates UTC time
