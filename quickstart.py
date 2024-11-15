@@ -14,8 +14,8 @@ from googleapiclient.errors import HttpError
 SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.readonly"]
 
 
-# Filter for visible text multi-part (from plain, html, x-amp-html mimeTypes) messages and single-part messages
-def filterMessage(fullMsg):
+# Decodes the raw message to visible text for multi-part (from plain, html, x-amp-html mimeTypes) messages and single-part messages
+def decodeMessage(fullMsg):
   # Checks for multi-part messages
   if 'parts' in fullMsg['payload']:
     numParts = len(fullMsg['payload']['parts'])
@@ -48,20 +48,13 @@ def filterMessage(fullMsg):
       return soup.get_text(separator="\n", strip=True)
 
 
-def main():
-  """Uses the Gmail API to read and search for third-party automated maintenance emails and then 
-     creates Google Calendar events using the Google Calendar API based on the email information.
-  """
-  
-  # AUTHORIZATION
-  # The file token.json stores the user's access and refresh tokens, and is
-  # created automatically when the authorization flow completes for the first
-  # time.
-  
-  creds = None
-  
+# The file token.json stores the user's access and refresh tokens, and is
+# created automatically when the authorization flow completes for the first
+# time.
+def authorize(creds):
   if os.path.exists("token.json"):
     creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    
   # If there are no (valid) credentials available, let the user log in.
   if not creds or not creds.valid:
     if creds and creds.expired and creds.refresh_token:
@@ -71,10 +64,22 @@ def main():
           "credentials.json", SCOPES
       )
       creds = flow.run_local_server(port=0)
+      
     # Save the credentials for the next run
     with open("token.json", "w") as token:
       token.write(creds.to_json())
+      
+  return creds
 
+
+def main():
+  """
+    Uses the Gmail API to read and search for third-party automated maintenance emails and then 
+    creates Google Calendar events using the Google Calendar API based on the email information.
+  """
+  # AUTHORIZATION
+  creds = None
+  creds = authorize(creds);
 
   try:
      # PERFORM SEARCH QUERY
@@ -115,7 +120,7 @@ def main():
       
       print(f"SUBJECT: \t{resSubject}\n")
 
-      visibleText = filterMessage(fullMsg)
+      visibleText = decodeMessage(fullMsg)
       if visibleText:
           print("\nBODY:\n")
           print(f"{visibleText}")
