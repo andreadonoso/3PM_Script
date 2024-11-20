@@ -138,6 +138,7 @@ def writeToWordDoc(queryRes, service_gmail):
   path = os.path.join(directory, file_name)
   doc = docx.Document() 
   
+  print(f"WRITING TO DOC. PLEASE WAIT . . .")
   for count,message in enumerate(messages, start=1):
     fullMsg = service_gmail.users().messages().get(userId="me", id=message['id'], format="full").execute()
     headers = fullMsg['payload']['headers']
@@ -185,51 +186,6 @@ def main():
     
     # WRITE VALID EMAILS TO WORD DOC
     writeToWordDoc(queryRes, service_gmail)
-    
-    
-    # APPROACH 1
-    # Determine correct date from the subject & ensure that we don't have duplicate: maintenance id's nor (date-time && place)
-    # - When we go through emails, add them to a dictionary (emails) of dictionaries (email content) and return the email dictionary
-    # - Determine valid emails and filter the dictionary into a new one
-    
-    # APPROACH 2
-    # Write all resulting emails in a word document with the desired formatting for friday doc
-    #     -> Manual word doc validation 
-    #     -> Option 1: Automated calendar entry based on edited/unedited word doc
-    #     -> Option 2: Manual calendar entry based on edited/unedited word doc
-    
-    # APPROACH 3
-    # Write the valid emails in a word document with the desired formatting for friday doc
-    #     -> Option 1: manual calendar entry
-    #     -> Option 2: Once word doc has been validated, create calendar events based on the word doc
-    
-    
-    # # CREATE GOOGLE CALENDAR EVENTS FOR VALID EMAILS
-    # # Call the Calendar API
-    # service_gcal = build("calendar", "v3", credentials=creds)
-    # now = datetime.datetime.now(datetime.UTC) 
-    # print("Getting the upcoming 10 events")
-    # events_result = (
-    #     service_gcal.events()
-    #     .list(
-    #         calendarId="primary",
-    #         timeMin=now,
-    #         maxResults=10,
-    #         singleEvents=True,
-    #         orderBy="startTime",
-    #     )
-    #     .execute()
-    # )
-    # events = events_result.get("items", [])
-
-    # if not events:
-    #   print("No upcoming events found.")
-    #   return
-
-    # # Prints the start and name of the next 10 events
-    # for event in events:
-    #   start = event["start"].get("dateTime", event["start"].get("date"))
-    #   print(start, event["summary"])
 
   except HttpError as error:
     # TODO(developer) - Handle errors from gmail API.
