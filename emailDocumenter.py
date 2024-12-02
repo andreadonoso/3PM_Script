@@ -161,8 +161,8 @@ def writeToWordDoc(queryRes, service_gmail):
 
 def main():
   """
-    Uses the Gmail API to read and search for third-party automated maintenance emails and then 
-    creates Google Calendar events using the Google Calendar API based on the email information.
+    Uses the Gmail API to search for emails and then prints them to a word document. 
+    It creates Google Calendar events using the Google Calendar API based on the email event information.
   """
   # AUTHORIZATION
   creds = None
