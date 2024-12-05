@@ -14,7 +14,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 
-SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.readonly", 'https://www.googleapis.com/auth/calendar.events']
 
 
 # The file token.json stores the user's access and refresh tokens, and is created
@@ -94,9 +94,9 @@ def performSearchQuery(service_gmail, sentFrom, label, subject, body, numResults
 # Decodes the messages and displays them
 def showQueryResults(searchQuery, queryRes, numResults, service_gmail):
   print("\n\n-----------------------------------------------------------------------------------------------------------------------------------------------------------------\n\n")
-  print(f"Query:\t {searchQuery.strip()}")
-  print(f"Results: {queryRes['resultSizeEstimate']}")
-  print(f"Showing: {numResults}\n")
+  print(f"Query:\t {searchQuery.strip()}\n")
+  print(f"Result size estimate:\t{queryRes['resultSizeEstimate']}")
+  print(f"Max results to show:\t{numResults}\n")
   
   if 'messages' not in queryRes or (queryRes['resultSizeEstimate'] <= 0):
     print("No emails found\n")
@@ -123,7 +123,6 @@ def showQueryResults(searchQuery, queryRes, numResults, service_gmail):
 # Writes decoded messages to a word document
 def writeToWordDoc(queryRes, service_gmail):
   if 'messages' not in queryRes or (queryRes['resultSizeEstimate'] <= 0):
-    print("No emails found\n")
     return 
   messages = queryRes['messages']
   
@@ -158,6 +157,75 @@ def writeToWordDoc(queryRes, service_gmail):
   doc.save(path) 
   print("Document saved.\n")
 
+# Creates a calendar event based on the body of an email
+def createEvents(service_gcal, queryRes, service_gmail):
+  if 'messages' not in queryRes or (queryRes['resultSizeEstimate'] <= 0):
+    return 
+  messages = queryRes['messages']
+  
+  numEvents = 0
+  if(queryRes['resultSizeEstimate'] > 0):
+    print(f"\nCREATING EVENTS. PLEASE WAIT . . .\n\n")
+  
+    for count,message in enumerate(messages, start=1):
+      fullMsg = service_gmail.users().messages().get(userId="me", id=message['id'], format="full").execute()
+      visibleText = decodeMessage(fullMsg)
+
+      patterns = {
+        "summary": r'Summary:\s*"(.*?)"',
+        "description": r'Description:\s*"(.*?)"',
+        "startDateTime": r'Start date time:\s*"(.*?)"',
+        "startTimeZone": r'Start time zone:\s*"(.*?)"',
+        "endDateTime": r'End date time:\s*"(.*?)"',
+        "endTimeZone": r'End time zone:\s*"(.*?)"',
+      }
+
+      parts = visibleText.split("* * * * * * * * * * * * * * * * * * * * * * * * *  PART CHANGE  * * * * * * * * * * * * * * * * * * * * * * * * *")
+      part1 = parts[0]
+      
+      data = {}
+      for key, pattern in patterns.items():
+          match = re.search(pattern, part1)
+          if match:
+              data[key] = match.group(1)
+          
+      summary = data.get('summary')
+      description = data.get('description')
+      startDateTime = data.get('startDateTime')
+      startTimeZone = data.get('startTimeZone')
+      endDateTime = data.get('endDateTime')
+      endTimeZone = data.get('endTimeZone')
+      
+      event = {
+        'summary': summary,
+        'location': '',
+        'description': description,
+        'start': {
+          'dateTime': startDateTime,
+          'timeZone': startTimeZone,
+        },
+        'end': {
+          'dateTime': endDateTime,
+          'timeZone': endTimeZone,
+        },
+        'recurrence': [
+        ],
+        'attendees': [
+        ],
+        'reminders': {
+          'useDefault': True,
+          'overrides': [
+          ],
+        },
+      }
+
+      event = service_gcal.events().insert(calendarId='primary', body=event).execute()
+      print('Event created: %s' % (event.get('htmlLink')))
+      
+      if(count == len(messages)):
+        numEvents = count
+    
+  print(f"\nEvents created: {numEvents}.\n\n")
 
 def main():
   """
@@ -182,10 +250,14 @@ def main():
     # SHOW SEARCH QUERY RESULTS
     showQueryResults(searchQuery, queryRes, numResults, service_gmail)
     
-    # FILTER VALID EMAILS
+    # TBD: FILTER VALID EMAILS
     
     # WRITE VALID EMAILS TO WORD DOC
     writeToWordDoc(queryRes, service_gmail)
+    
+    # CREATE CALENDAR EVENTS
+    # service_gcal = build("calendar", "v3", credentials=creds)
+    # createEvents(service_gcal, queryRes, service_gmail)
 
   except HttpError as error:
     # TODO(developer) - Handle errors from gmail API.
@@ -193,4 +265,4 @@ def main():
 
 
 if __name__ == "__main__":
-  main()
+  main()        
