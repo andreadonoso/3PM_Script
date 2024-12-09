@@ -47,7 +47,7 @@ def normalizeText(text):
   return text
 
 # Decodes the raw message to visible text for multi-part (from plain, html, x-amp-html mimeTypes) messages and single-part messages
-def decodeMessage(fullMsg):
+def decodeBody(fullMsg):
   # Checks for multi-part messages
   if 'parts' in fullMsg['payload']:
     numParts = len(fullMsg['payload']['parts'])
@@ -81,6 +81,18 @@ def decodeMessage(fullMsg):
       visibleText = soup.get_text(separator="\n", strip=True)
       return normalizeText(visibleText)
 
+# Gets each email's decoded body content and update the queryRes['messages'] to have the fully decoded body ('fullMessage')
+# Example: queryRes['messages'][0]['fullMessage'] contains the decoded body of the first message in the message list
+def decodeResults(queryRes, service_gmail):
+  if 'messages' not in queryRes or (queryRes['resultSizeEstimate'] <= 0):
+    return 
+  messages = queryRes['messages']
+  
+  for message in messages:
+    fullMessage = service_gmail.users().messages().get(userId="me", id=message['id'], format="full").execute()
+    fullMessage['payload']['visibleText'] = decodeBody(fullMessage)
+    message['fullMessage'] = fullMessage
+
 # Performs the email search query with the Gmail API
 def performSearchQuery(service_gmail, sentFrom, label, subject, body, numResults):
   f = f'from:"{sentFrom}"' if sentFrom else ''
@@ -92,7 +104,7 @@ def performSearchQuery(service_gmail, sentFrom, label, subject, body, numResults
   return searchQuery, service_gmail.users().messages().list(userId="me", q=searchQuery, maxResults=numResults).execute()
 
 # Decodes the messages and displays them
-def showQueryResults(searchQuery, queryRes, numResults, service_gmail):
+def showQueryResults(searchQuery, queryRes, numResults):
   print("\n\n-----------------------------------------------------------------------------------------------------------------------------------------------------------------\n\n")
   print(f"Query:\t {searchQuery.strip()}\n")
   print(f"Result size estimate:\t{queryRes['resultSizeEstimate']}")
@@ -107,12 +119,11 @@ def showQueryResults(searchQuery, queryRes, numResults, service_gmail):
   for count,message in enumerate(messages, start=1):
     print(f"\n\n\n{count}) - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -\n\n\n")
     
-    fullMsg = service_gmail.users().messages().get(userId="me", id=message['id'], format="full").execute()
-    headers = fullMsg['payload']['headers']
+    headers = message['fullMessage']['payload']['headers']
     resSubject = next((header['value'] for header in headers if header['name'] == 'Subject'), "No Subject")
     print(f"SUBJECT:  {resSubject}\n")
     
-    visibleText = decodeMessage(fullMsg)
+    visibleText = message['fullMessage']['payload']['visibleText']
     if visibleText:
         print("\nBODY:\n")
         print(f"{visibleText}")
@@ -121,7 +132,7 @@ def showQueryResults(searchQuery, queryRes, numResults, service_gmail):
   print("\n-----------------------------------------------------------------------------------------------------------------------------------------------------------------\n\n")
 
 # Writes decoded messages to a word document
-def writeToWordDoc(queryRes, service_gmail):
+def writeToWordDoc(queryRes):
   if 'messages' not in queryRes or (queryRes['resultSizeEstimate'] <= 0):
     return 
   messages = queryRes['messages']
@@ -139,13 +150,13 @@ def writeToWordDoc(queryRes, service_gmail):
   
   print(f"WRITING TO DOC. PLEASE WAIT . . .")
   for count,message in enumerate(messages, start=1):
-    fullMsg = service_gmail.users().messages().get(userId="me", id=message['id'], format="full").execute()
-    headers = fullMsg['payload']['headers']
+    # fullMsg = service_gmail.users().messages().get(userId="me", id=message['id'], format="full").execute()
+    headers = message['fullMessage']['payload']['headers']
     resSubject = next((header['value'] for header in headers if header['name'] == 'Subject'), "No Subject")
     
     doc.add_heading(resSubject + "\n", level=2).bold = True
     
-    visibleText = decodeMessage(fullMsg)
+    visibleText = message['fullMessage']['payload']['visibleText']
     if visibleText:
         doc.add_paragraph(visibleText)
     else:
@@ -158,7 +169,7 @@ def writeToWordDoc(queryRes, service_gmail):
   print("Document saved.\n")
 
 # Creates a calendar event based on the body of an email
-def createEvents(service_gcal, queryRes, service_gmail):
+def createEvents(service_gcal, queryRes):
   if 'messages' not in queryRes or (queryRes['resultSizeEstimate'] <= 0):
     return 
   messages = queryRes['messages']
@@ -168,8 +179,7 @@ def createEvents(service_gcal, queryRes, service_gmail):
     print(f"\nCREATING EVENTS. PLEASE WAIT . . .\n\n")
   
     for count,message in enumerate(messages, start=1):
-      fullMsg = service_gmail.users().messages().get(userId="me", id=message['id'], format="full").execute()
-      visibleText = decodeMessage(fullMsg)
+      visibleText = message['fullMessage']['payload']['visibleText']
 
       patterns = {
         "summary": r'Summary:\s*"(.*?)"',
@@ -237,27 +247,28 @@ def main():
   creds = authorize(creds)
 
   try:
-    sentFrom = ""
+    sentFrom = "donosoandrea@icloud.com"
     label = ""
-    subject = ""
+    subject = "Test Email with Event"
     body = ""
     numResults = 10  # Max Results = 500
   
     # PERFORM SEARCH QUERY
     service_gmail = build("gmail", "v1", credentials=creds) # Gmail API service object 
     searchQuery, queryRes = performSearchQuery(service_gmail, sentFrom, label, subject, body, numResults)
+    decodeResults(queryRes, service_gmail)
     
     # SHOW SEARCH QUERY RESULTS
-    showQueryResults(searchQuery, queryRes, numResults, service_gmail)
+    showQueryResults(searchQuery, queryRes, numResults)
     
     # TBD: FILTER VALID EMAILS
     
     # WRITE VALID EMAILS TO WORD DOC
-    writeToWordDoc(queryRes, service_gmail)
+    writeToWordDoc(queryRes)
     
     # CREATE CALENDAR EVENTS
-    # service_gcal = build("calendar", "v3", credentials=creds)
-    # createEvents(service_gcal, queryRes, service_gmail)
+    service_gcal = build("calendar", "v3", credentials=creds)
+    createEvents(service_gcal, queryRes)
 
   except HttpError as error:
     # TODO(developer) - Handle errors from gmail API.
