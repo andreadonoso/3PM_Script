@@ -150,7 +150,6 @@ def writeToWordDoc(queryRes):
   
   print(f"WRITING TO DOC. PLEASE WAIT . . .")
   for count,message in enumerate(messages, start=1):
-    # fullMsg = service_gmail.users().messages().get(userId="me", id=message['id'], format="full").execute()
     headers = message['fullMessage']['payload']['headers']
     resSubject = next((header['value'] for header in headers if header['name'] == 'Subject'), "No Subject")
     
